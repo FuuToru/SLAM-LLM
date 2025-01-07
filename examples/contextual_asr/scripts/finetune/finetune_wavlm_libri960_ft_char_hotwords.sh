@@ -1,6 +1,6 @@
 #!/bin/bash
 # Set up environment variables
-export PYTHONPATH=/kaggle/working/SLAM-LLM:/kaggle/working/SLAM-LLM/slam_llm:$PYTHONPATH
+export PYTHONPATH=/kaggle/working/SLAM-LLM:/kaggle/working/SLAM-LLM/src:$PYTHONPATH
 export CUDA_VISIBLE_DEVICES=0,1
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=1
