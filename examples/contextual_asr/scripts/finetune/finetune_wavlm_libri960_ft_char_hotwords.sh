@@ -1,20 +1,24 @@
 #!/bin/bash
-export PYTHONPATH=/root/fairseq:$PYTHONPATH
-export CUDA_VISIBLE_DEVICES=2,3
+# Set up environment variables
+export PYTHONPATH=/kaggle/working/SLAM-LLM:$PYTHONPATH
+export CUDA_VISIBLE_DEVICES=0,1  # Sử dụng 2 GPU
 export TOKENIZERS_PARALLELISM=false
-# export CUDA_LAUNCH_BLOCKING=1
 export OMP_NUM_THREADS=1
 
-cd /nfs/yangguanrou.ygr/codes/SLAM-LLM
+# Chuyển đến thư mục làm việc Kaggle
+cd /kaggle/working/SLAM-LLM
+
+# Đường dẫn dữ liệu và mô hình trên Kaggle
 code_dir=examples/contextual_asr
 
-speech_encoder_path=/nfs/yangguanrou.ygr/ckpts/wavlm_large_ft_libri960_char/wavlm_large_ft_libri960_char.pt
-llm_path=/nfs/maziyang.mzy/models/vicuna-7b-v1.5
-train_data_path=/nfs/maziyang.mzy/data/librispeech/librispeech_train_960h.jsonl
-val_data_path=/nfs/maziyang.mzy/data/librispeech/librispeech_dev_other.jsonl
+speech_encoder_path=/kaggle/input/ckpts/wavlm_large_ft_libri960_char.pt
+llm_path=/kaggle/input/vicuna-7b-v1.5  # Đặt mô hình Vicuna tại thư mục này
+train_data_path=/kaggle/input/librispeech/librispeech_train_960h.jsonl
+val_data_path=/kaggle/input/librispeech/librispeech_dev_other.jsonl
 
-output_dir=/nfs/yangguanrou.ygr/experiments_librispeech/vicuna-7b-v1.5-WavLM-Large-libri960-ft-char-hotwords-$(date +"%Y%m%d")-debug
+output_dir=/kaggle/working/output/vicuna-7b-v1.5-WavLM-Large-libri960-ft-char-hotwords-$(date +"%Y%m%d")
 
+# Thiết lập Hydra arguments
 hydra_args="
 hydra.run.dir=$output_dir \
 ++model_config.llm_name=vicuna-7b-v1.5 \
@@ -47,31 +51,20 @@ hydra.run.dir=$output_dir \
 ++train_config.num_workers_dataloader=2 \
 ++train_config.output_dir=$output_dir \
 ++metric=acc \
-++log_config.log_file=/$output_dir/train.log \
-++log_config.use_wandb=true \
-++log_config.wandb_dir=$output_dir \
-++log_config.wandb_entity_name=yanghaha \
-++log_config.wandb_project_name=slam-llm \
-++log_config.wandb_exp_name=vicuna-7b-v1.5-WavLM-Large-libri960-ft-char-hotwords \
+++log_config.log_file=$output_dir/train.log \
+++log_config.use_wandb=false \  # Tắt wandb nếu không cần
 ++log_config.log_interval=5 \
 "
 
-# -m debugpy --listen 5678 --wait-for-client
-if [[ $CUDA_VISIBLE_DEVICES != *","* ]]; then
-    python -m debugpy --listen 5678 --wait-for-client $code_dir/finetune_contextual_asr.py \
-        --config-path "conf" \
-        --config-name "prompt.yaml" \
-        $hydra_args
-else
-    torchrun \
-        --nnodes 1 \
-        --nproc_per_node 2 \
-        --master_port=29504 \
-        $code_dir/finetune_contextual_asr.py \
-        --config-path "conf" \
-        --config-name "prompt.yaml" \
-        ++train_config.enable_fsdp=false \
-        ++train_config.enable_ddp=true \
-        ++train_config.use_fp16=true \
-        $hydra_args
-fi
+# Huấn luyện với 2 GPU
+torchrun \
+    --nnodes=1 \  # Số node là 1 vì chạy trên một máy duy nhất
+    --nproc_per_node=2 \  # Số GPU sẽ sử dụng
+    --master_port=29504 \  # Cổng giao tiếp
+    $code_dir/finetune_contextual_asr.py \
+    --config-path "conf" \
+    --config-name "prompt.yaml" \
+    ++train_config.enable_fsdp=false \
+    ++train_config.enable_ddp=true \
+    ++train_config.use_fp16=true \
+    $hydra_args
